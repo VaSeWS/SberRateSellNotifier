@@ -1,0 +1,9 @@
+module github.com/VaSeWS/SberRateSellNotifier
+
+go 1.25.5
+
+require (
+	github.com/PaulSonOfLars/gotgbot/v2 v2.0.0-rc.34 // indirect
+	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1 // indirect
+	github.com/robfig/cron/v3 v3.0.1 // indirect
+)

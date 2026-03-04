@@ -1,0 +1,8 @@
+services:
+  notifier:
+    build: .
+    restart: unless-stopped
+    environment:
+      - TG_CHAT_ID=${TG_CHAT_ID}
+      - TELEGRAM_API_TOKEN=${TELEGRAM_API_TOKEN}
+      - OFFICE_ID=${OFFICE_ID}
