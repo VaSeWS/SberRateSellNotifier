@@ -11,16 +11,6 @@ import (
 
 const rateURL = "https://www.sberbank.ru/proxy/services/rates/public/v4/branchesRates"
 
-var parsedRateURL *url.URL
-
-func init() {
-	var err error
-	parsedRateURL, err = url.Parse(rateURL)
-	if err != nil {
-		panic(fmt.Sprintf("invalid rateURL constant: %v", err))
-	}
-}
-
 type RateEntry struct {
 	RangeAmountBottom float64 `json:"rangeAmountBottom"`
 	RangeAmountUpper  float64 `json:"rangeAmountUpper"`
@@ -40,7 +30,10 @@ type BranchRates struct {
 }
 
 func FetchLocalRates(ctx context.Context, client *http.Client, officeIDs []string, currencyCode string) ([]BranchRates, error) {
-	u := *parsedRateURL
+	u, err := url.Parse(rateURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid rate URL: %w", err)
+	}
 
 	q := u.Query()
 	q.Set("rateType", "ERNP-1")
@@ -65,7 +58,7 @@ func FetchLocalRates(ctx context.Context, client *http.Client, officeIDs []strin
 		return nil, err
 	}
 	defer response.Body.Close()
-	slog.Info("got responce from sberbank API")
+	slog.Debug("got response from sberbank API")
 
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status: %s", response.Status)

@@ -8,46 +8,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/robfig/cron/v3"
 
-	sberparser "github.com/VaSeWS/SberRateSellNotifier/sber-parser"
-	tgbot "github.com/VaSeWS/SberRateSellNotifier/tg-bot"
+	"github.com/VaSeWS/SberRateSellNotifier/internal/config"
+	"github.com/VaSeWS/SberRateSellNotifier/internal/sberparser"
+	"github.com/VaSeWS/SberRateSellNotifier/internal/tgbot"
 )
 
-const currencyCode = "USD"
-
-type Config struct {
-	TGChatID int64
-	TGToken  string
-	OfficeID string
-}
-
-func loadConfig() (*Config, error) {
-	tgChatID, err := strconv.ParseInt(os.Getenv("TG_CHAT_ID"), 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse TG_CHAT_ID: %w", err)
-	}
-	tgToken := os.Getenv("TELEGRAM_API_TOKEN")
-	if tgToken == "" {
-		return nil, fmt.Errorf("TELEGRAM_API_TOKEN is not set")
-	}
-	officeID := os.Getenv("OFFICE_ID")
-	if officeID == "" {
-		return nil, fmt.Errorf("OFFICE_ID is not set")
-	}
-	return &Config{
-		TGChatID: tgChatID,
-		TGToken:  tgToken,
-		OfficeID: officeID,
-	}, nil
-}
-
 func main() {
-	conf, err := loadConfig()
+	conf, err := config.LoadConfig()
 	if err != nil {
 		slog.Error("failed to load a config", "error", err)
 		os.Exit(1)
@@ -67,24 +39,25 @@ func main() {
 
 	go func() {
 		<-quit
-		cancel() // signal everything to stop
+		cancel()
 	}()
 
 	cr := cron.New()
-	_, err = cr.AddFunc("0 12 * * *", func() {
-		resp, err := sberparser.FetchLocalRates(ctx, client, offices, "USD")
+	_, err = cr.AddFunc(conf.CronSchedule, func() {
+		resp, err := sberparser.FetchLocalRates(ctx, client, offices, conf.CurrencyCode)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return
 			}
-			msg := fmt.Sprintln("error fetching rate: ", err)
-			bot.SendMessage(msg)
+			msg := fmt.Sprintf("error fetching rate: %v", err)
+			if sendErr := bot.SendMessage(msg); sendErr != nil {
+				slog.Error("error sending error message", "error", sendErr)
+			}
 			slog.Error("error fetching rate", "error", err)
 			return
 		}
 		for _, rate := range resp {
-
-			rateData, ok := rate.Rates[currencyCode]
+			rateData, ok := rate.Rates[conf.CurrencyCode]
 			if !ok || len(rateData.RateList) == 0 {
 				slog.Error("no rates for office", slog.Int64("officeID", rate.ID))
 				continue
@@ -103,8 +76,9 @@ func main() {
 		os.Exit(1)
 	}
 	cr.Start()
-	defer cr.Stop()
 
 	<-ctx.Done()
+	stopCtx := cr.Stop()
+	<-stopCtx.Done()
 	slog.Info("Shutting down...")
 }
